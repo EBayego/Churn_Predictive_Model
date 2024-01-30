@@ -1,0 +1,445 @@
+---
+title: 'Data Mining - Predicting Customer Churn'
+author: "Author: Eduardo Bayego Modrego"
+date: "January 2024"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data cleaning
+
+First, we import the processed set, with clean, quality and discretized variables.
+```{r}
+set.seed(333)  
+telecomCleanData <- read.csv("./telecomCleanData.csv")
+```
+
+Let's first check that we have all the data clean and of good quality, in order to be able to apply the different algorithms correctly, such as kmeans.
+```{r}
+print('NA')
+colSums(is.na(telecomCleanData))
+print('White')
+colSums(telecomCleanData=="")
+```
+
+We see that there are values in two fields with null values, so we eliminate them without any problem, since the number is not very high and we still have a good amount of data.
+```{r}
+telecomCleanData <- na.omit(telecomCleanData)
+```
+
+# Unsupervised Model
+Now that we have the data 100% clean (since the empty texts will not be a problem when applying the algorithm), we have 2 ways to approach the problem: apply kmodes, or apply kmeans, in which we have to transform the categorical variables to numerical, so we would have to check the different values of each variable and assign a number, writing them down in a separate note that serves as a legend for when we want to analyze the results. 
+After many tests with kmodes, I have observed that it gives many errors and failures and no accurate conclusion, and also, because the categorical variable "City" is the most problematic because it takes many different values, we can eliminate this and use Zip.Code (zip code), because for practical purposes, it is the same (if there was a zip code in which all were out of the company, it would mean that there is an area of a city in which, for example, it is possible that the telephone connection is bad. This is actually more accurate than filtering by cities). We can analyze the value of these two variables in our predictive model, to see if Zip.Code has equal or greater value than "City". If so, we can be sure to use only Zip.Code to make the task easier.
+```{r message= FALSE, warning=FALSE}
+if(!require('DescTools')) install.packages('DescTools'); library('DescTools')
+#We use only Phi or CramerV, because being 2x2 it will always be the same value one as the other
+variables_predictoras <- names(telecomCleanData)[names(telecomCleanData) != "Customer.Status"]
+for (variable in variables_predictoras) {
+  cat("\n")
+  print(variable)
+  print(Phi(table(telecomCleanData[[variable]], telecomCleanData$Customer.Status)))
+}
+```
+
+With this data we can draw several initial conclusions, although they will be analyzed later, here for the moment we only want to see the value of City and Zip.Code, and we observe that we can effectively eliminate City and stay with Zip.Code, and transform the rest of variables to numerical. We can also eliminate the id of the client, since this does not mean anything in our analysis.
+```{r}
+telecomCleanData <- subset(telecomCleanData, select = -c(City, Customer.ID))
+
+for (columna in names(telecomCleanData)) {
+  if (is.character(telecomCleanData[[columna]])) {
+    cat("Variable:", columna, "\n")
+    cat("Valores únicos:", unique(telecomCleanData[[columna]]), "\n")
+    cat("\n")
+  }
+}
+```
+
+```{r}
+telecomNumericData <- telecomCleanData
+
+variables_siono <- c("Married", "Phone.Service", "Multiple.Lines", "Internet.Service", "Online.Security", "Online.Backup", "Device.Protection.Plan", "Premium.Tech.Support", "Streaming.TV", "Streaming.Movies", "Streaming.Music", "Unlimited.Data", "Paperless.Billing")
+
+for (variable in variables_siono) {
+  telecomNumericData[[variable]] <- ifelse(telecomNumericData[[variable]] == "Yes", 1, 0)
+}
+
+lista_leyendas <- list()
+lista_leyendas[["legend_Yes_No"]] <- data.frame(Valor_Numerico = c(0, 1), Leyenda = c("No", "Yes"))
+
+for (columna in names(telecomNumericData)) {
+  if (is.character(telecomNumericData[[columna]])) {
+    telecomNumericData[[columna]] <- factor(telecomNumericData[[columna]], levels = unique(telecomNumericData[[columna]]))
+    
+    leyenda <- levels(telecomNumericData[[columna]])
+    leyenda <- factor(leyenda)
+    leyenda_numerica <- as.numeric(leyenda)
+    lista_leyendas[[paste0("legend_", columna)]] <- data.frame(Valor_Numerico = leyenda_numerica, Leyenda = leyenda)
+    
+    telecomNumericData[[columna]] <- as.numeric(telecomNumericData[[columna]])
+  }
+}
+
+for (nombre_dataset in names(lista_leyendas)) {
+  cat("Data from", nombre_dataset, ":\n")
+  print(lista_leyendas[[nombre_dataset]])
+  cat("\n")
+}
+```
+
+In this last code we have created a new dataset to store all the numerical variables, we have modified all the variables that were of "Yes" or "No" by their respective number 1 and 0, we have also created a list to store all the datasets that contain all the legends of the numerical value of the variables to understand well the results of the analysis that we are doing, and then we have modified the rest of the variables to numerical.
+
+Now we can see which cluster value is the best to separate the data by several criteria: elbow, mean silhouette and Calinski-Harabasz.
+```{r message= FALSE, warning=FALSE}
+results <- rep(0, 10)
+for (i in c(2:10))
+{
+  fit <- kmeans(telecomNumericData, i)
+  results[i] <- fit$tot.withinss
+}
+plot(2:10,results[2:10],type="o",col="deepskyblue",pch=0,xlab="Clusters number",ylab="tot.tot.withinss")
+
+if (!require('fpc')) install.packages('fpc')
+library(fpc)
+fit_ch  <- kmeansruns(telecomNumericData, krange = 1:10, criterion = "ch") 
+fit_asw <- kmeansruns(telecomNumericData, krange = 1:10, criterion = "asw") 
+fit_ch$bestk
+fit_asw$bestk
+
+plot(1:10,fit_ch$crit,type="o",col="deepskyblue",pch=0,xlab="Clusters number",ylab="Calinski-Harabasz")
+plot(1:10,fit_asw$crit,type="o",col="deepskyblue",pch=0,xlab="Clusters number",ylab="Silueta Media")
+```
+
+In the elbow method, we can deduce that 5 would be a good value, since we can see how the graph begins to stabilize. However, in the mean silhouette and Calinski-Harabasz criteria, the best value in both is 2. Interestingly, both graphs are practically the same, with hardly any differences. 
+
+We can conclude first of all, that since two criteria suggest that 2 is the optimal value for the choice of clusters, testing first with this value and observing the results would be best. However, the other criterion should not be neglected either, and testing with 5 will give us other results and another view with which to compare our first result and see which is better for the project.
+
+***
+
+# New Unsupervised Model, but using a different distance metric
+
+For this dataset, we know that what we are trying to predict is grouped into 3 possible values: Stayed, Churned, Joined. Because of this, we are going to group some variables 2 by 2 to see if any can help us predict these groups by comparing them with the real one.
+```{r message= FALSE, warning=FALSE}
+telecom3clusters <- kmeans(telecomNumericData, 3)
+
+plot(telecomNumericData[c(5,31)], col=telecom3clusters$cluster, main="Clasification k-means Zip.Code - Total.Revenue")
+plot(telecomNumericData[c(5,31)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+
+plot(telecomNumericData[c(2,8)], col=telecom3clusters$cluster, main="Clasification k-means Age - Offer")
+plot(telecomNumericData[c(2,8)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+
+plot(telecomNumericData[c(23,26)], col=telecom3clusters$cluster, main="Clasification k-means Monthly.Charge - Contract")
+plot(telecomNumericData[c(23,26)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+```
+
+We can note that the differences with the real classification are visible, they are not grouped very well. This is largely due to the fact that it makes 3 groups of equal size, when in reality this is not the case. 
+```{r}
+print(table(telecomCleanData$Customer.Status))
+```
+
+## Comparison of both Unsupervised Models
+
+We can observe that the new clients are much less in comparison with the rest, and at the same time, those who leave are half of those who stay. We can try to make the previous graphs but with 2 clusters, leaving out the Joined group, to see if the other two can be grouped in a decent way.
+```{r message= FALSE, warning=FALSE}
+telecom2clusters <- kmeans(telecomNumericData, 2)
+
+plot(telecomNumericData[c(5,31)], col=telecom2clusters$cluster, main="Clasification k-means Zip.Code - Total.Revenue")
+plot(telecomNumericData[c(5,31)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+
+plot(telecomNumericData[c(2,8)], col=telecom2clusters$cluster, main="Clasification k-means Age - Offer")
+plot(telecomNumericData[c(2,8)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+
+plot(telecomNumericData[c(23,26)], col=telecom2clusters$cluster, main="Clasification k-means Monthly.Charge - Contract")
+plot(telecomNumericData[c(23,26)], col=as.factor(telecomCleanData$Customer.Status), main="Real Clasification")
+```
+
+We found that the zip code - total income and age - offer charts are not very accurate. However, the last one of monthly charge - type of contract, seems a little better. We can conclude that the 2 clusters model seems to be better than 3 clusters, since the joined group is very small, and we are not too interested in this particular analysis, since we want to predict when a customer is going to leave the company (churned).
+	
+*** 
+
+# DBSCAN and OPTICS algorithms
+
+We are going to apply the OPTICS algorithm, which allows us to order the observations so that the nearest points become neighbors in the ordering. This algorithm does not require the number of clusters to be specified. We will first apply the algorithm with the default "minPts" and "eps" parameters.
+```{r message= FALSE, warning=FALSE}
+if (!require('dbscan')) install.packages('dbscan')
+if (!require('fpc')) install.packages('fpc')
+library(dbscan)
+library(fpc)
+
+res <- optics(telecomNumericData)
+res
+
+res$order
+plot(res)
+```
+
+We can observe that at the end there are some outliers, which indicate noise or outliers, since they are more distant from their immediate neighbors. However, the graph is almost always ascending from the first moment, so the groups will be very indistinguishable. If we play with the minPts and eps parameters, we can reduce or increase the noise. The minPts parameter tells us the minimum number of points that must be within a radius (eps) for a point to be considered 'core'. If a point has at least 'minPts' points within an 'eps' radius, it is considered a core. And, therefore, eps specifies the maximum distance allowed between two points for one to be considered a neighbor of the other. 
+```{r message= FALSE, warning=FALSE}
+res2 <- optics(telecomNumericData, minPts = 20, eps = 1000)
+res2$order
+plot(res2)
+```
+
+We observe that now with these parameters, the model has less noise at the end than the first one, but it is also even more bottom-up. From these models, we can now work with the DBSCAN algorithm. We will work with both to compare the quality of the models.
+```{r message= FALSE, warning=FALSE}
+clusters <- extractDBSCAN(res, eps_cl = .065)
+plot(clusters)
+clusters2 <- extractDBSCAN(res2, eps_cl = .065)
+plot(clusters2)
+```
+
+The parameter eps_cl is very important, and if we apply the general value of 0.065, we observe that the plot comes out all black. This means that the value is too low and is grouping all the points in a single cluster or considering many points as noise.
+```{r message= FALSE, warning=FALSE}
+clusters <- extractDBSCAN(res, eps_cl = 170)
+plot(clusters)
+clusters2 <- extractDBSCAN(res2, eps_cl = 275)
+plot(clusters2)
+```
+
+Let's take a better look at the groupings of values and outliers generated by the algorithm.
+```{r message= FALSE, warning=FALSE}
+hullplot(telecomNumericData, clusters)
+hullplot(telecomNumericData, clusters2)
+```
+
+## Comparison of the results obtained from the above models and DBSCAN
+
+Checking with many eps_cl values (not included in this document, otherwise it would be too long), we observe that these are the ones with which the best results have been obtained. This may be due to the fact that there is no clear density structure in the dataset data. In OPTICS, depending on the minpts and eps values chosen, the graph had much more noise than the initial one, or it was even more increasing, so the results would only get worse. Then, in DBSCAN, we observe that for the second graph (more increasing than the first one and with higher values) a higher value of eps_cl has been necessary than for the first one. In the second graph we can see that there are many more small groups, in addition to 3 more differentiated groups, 2 of them much larger than the rest. The first one looks similar to the second one, but eliminating the small clusters scattered around the plot, so it can be said that there is not so much noise, and therefore the first approach is better and cleaner. Even so, the vast majority of points are outside any cluster, and are considered noise, so, according to these algorithms, it follows that there are many variables and do not follow a concrete and defined pattern to reach a clear conclusion.
+
+***
+
+# Preparation for C50: selection of training and test samples
+
+Our reference variable in this data set is Customer.Status, which told us whether the customer had left or stayed. We will split the data in the most common way, 2/3 for the training set and 1/3 for the test set.
+```{r}
+if(!require('caret')) install.packages('caret'); library('caret')
+split_prop <- 0.75 
+indexes = createDataPartition(telecomCleanData$Customer.Status, p = split_prop, list = FALSE, times = 1)
+train_data <- telecomCleanData[indexes, ]
+test_data <- telecomCleanData[-indexes, ]
+trainX <- train_data[, -32]
+trainY <- train_data[, 32]
+testX <- test_data[, -32]
+testY <- test_data[, 32]
+summary(trainX)
+summary(trainY)
+summary(testX)
+summary(testY)
+```
+	
+We now check that there are no serious differences and the division of the data into training and test sets has been performed correctly using random sampling, the sets trainX, trainy contain 75% of the data, and testX, testy contain the remaining 25%.
+
+Since the classes are unbalanced, being "Churned": 1563, "Joined": 230 and "Stayed": 2959, I have chosen to use stratified sampling to ensure that the proportion of classes is maintained in both training and test sets. This ensures that the proportions of the classes ("Churned", "Joined", "Stayed") in both sets are representative of the proportions in the original data set. The function "createDataPartition", is in charge of performing this stratified sampling according to the target variable "Customer.Status", and a partition ratio of 75% for the training set and 25% for the test set has been maintained. In this way, the allocation is randomized, but remains proportional to the different values of Customer.Status.
+
+*** 
+
+# Rule generation
+
+```{r}
+trainY <-  as.factor(trainY)
+model <- C50::C5.0(trainX, trainY,rules=TRUE )
+summary(model)
+```
+
+We note that the variable Phone.Service only has a single value "Yes". Therefore, it does not contribute anything to the construction of the tree since it does not provide any information to divide the data into different branches, and we can eliminate it from our training and testing models. Let's check that it is not the only one.
+```{r}
+print(sapply(telecomCleanData, function(col) length(unique(col)) == 1))
+```
+
+We can see that Phone.Service, Internet.Service and Tenure_Category have only one value, so we remove them from our sets. At the same time, if we look at the analysis that we did at the beginning, there were some variables with blanks, which can give problems in the generation of the tree as well, so we will eliminate them for this model and be able to perform it correctly.
+```{r}
+telecomTreeData <- telecomCleanData[, -which(names(telecomCleanData) %in% c("Phone.Service", "Internet.Service", "Tenure_Category", "Churn.Category", "Churn.Reason", "Service_Category"))]
+```
+
+```{r}
+indexes = createDataPartition(telecomCleanData$Customer.Status, p = split_prop, list = FALSE, times = 1)
+train_data <- telecomTreeData[indexes, ]
+test_data <- telecomTreeData[-indexes, ]
+trainX <- train_data[, -30]
+trainY <- train_data[, 30]
+testX <- test_data[, -30]
+testY <- test_data[, 30]
+```
+```{r}
+trainY <-  as.factor(trainY)
+model <- C50::C5.0(trainX, trainY,rules=TRUE )
+summary(model)
+```
+
+Now the tree has been generated correctly, with a total of 20 rules. Let's explain some of them:
++ Rule 1: 8 indicates that there are 8 cases in the training data set that meet the conditions of this rule, and Lift 2.7 indicates that the rule is 2.7 times more likely to be true than if the variables were independent. The conditions are: 
+++ If Number.of.Dependents is greater than 0.
+++ And Number.of.Referrals is less than or equal to 3.
+++ And Tenure.in.Months is greater than 3.
+++ Y Monthly.Charge is greater than 49.15.
+++ And Total.Revenue is less than or equal to 486.98.
+++ Then, it classifies as "Churned" with 90% confidence.
+
++ Rule 16: There are 805 cases in the training data set that meet all the conditions of this rule, and this rule is 1.4 times more likely to be true than if the variables were independent.
+++ If Age is less than or equal to 64.
+++ And Number.of.Referrals is greater than 0.
+++ And Paperless.Billing is "No".
+++ And Total.Charges is greater than 4681.75.
+++ So, it classifies as "Stayed" with a confidence of 92.7%.
+
+And so it would go on with the others, the format in which it shows the rules is the same for all, changing the first number (8, lift 2.7) for sets or (162/11, lift 1.5) for number of cases in the sets.
+
+## Graphic and Text format of the Rules
+
+```{r}
+library(grid)
+model <- C50::C5.0(trainX, trainY)
+plot(model,gp = gpar(fontsize = 5))
+```
+
+The model is too large to see it clearly. To see it better, we can export the image and zoom into the areas we want. Also, we can show subbranches with the subtree parameter. In the image above, we can see how above each variable balloon, we have a number that represents the node. These subbranches will show us only the results from that node down.
+```{r}
+plot(model,gp = gpar(fontsize = 5), subtree = 3)
+plot(model,gp = gpar(fontsize = 5), subtree = 31)
+plot(model,gp = gpar(fontsize = 5), subtree = 45)
+```
+
+## Confusion matrix
+
+Let's calculate the confusion matrix to identify the types of errors made.
+```{r}
+mat_conf<-table(testY,Predicted=predict(model, testX, type="class"))
+mat_conf
+```
+
+In this matrix, we can see that in the main diagonal are the correct predictions for each class. 275 have been correctly classified as Churned, but 15 have been wrongly classified as Joined and 100 as Stayed. 21 have been correctly classified as Joined, but 36 wrongly classified as Churned. And 669 were correctly classified as Stayed, but 70 were wrongly classified as Churned. 
+```{r}
+porcentaje_correct<-100 * sum(diag(mat_conf)) / sum(mat_conf)
+print(sprintf("The %% of records correctly classified is: %.4f %%",porcentaje_correct))
+```
+
+We note that the prediction is good enough. However, the percentage could be increased if we do more tests, modifying the trial parameter. In this way, it would be generating the models that we specify, choosing the rules and detailing them more taking the information of all the models, generating one with a greater base.
+With the gmodels package we get more complete information:
+```{r}
+if(!require(gmodels)){
+    install.packages('gmodels', repos='http://cran.us.r-project.org')
+    library(gmodels)
+}
+CrossTable(testY, predict(model, testX, type="class"), prop.chisq=FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c('Reality', 'Prediction'))
+```
+
+This table gives us extra information on the percentage of success or failure in each case. For example, it has correctly predicted 0.232 out of 1 (23.2%) the cases of Churned, and erroneously 0.013 in Joined. So, if we want to see the total hit percentage, we add the percentages of the diagonal and we have the above result: 0.232 + 0.018 + 0.564 = 0.814 = 81.4%. The failure percentage would therefore be the subtraction 100-81.4 = 18.6%.
+
+*** 
+
+# Different variation and algorithmic approach 
+
+Let's try now to increase the trials parameter to do what I have explained above and increase our hit percentage.
+```{r}
+model2 <- C50::C5.0(trainX, trainY, trials = 10)
+summary(model2)
+```
+
+We can see that the model has been run 10 times, and the percentage will have increased if it has been a good repetition.
+```{r}
+predicted_model <- predict(model2, testX, type="class")
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testY) / length(predicted_model)))
+```
+
+We note that the accuracy has increased by 2%, so the quality has increased slightly. At this level of values, the higher the quality, increasing the quality closer to 100% becomes an exponential difficulty, since making a more accurate model is more and more complicated.
+
+## Comparison of the results with the previous supervised model
+
+We note that the second model has used more variables than the first one:
+94.64%	Tenure.in.Months
+	 54.23%	Age
+	 53.93%	Number.of.Referrals
+	 51.43%	Online.Security
+	 49.55%	Contract
+	 38.90%	Payment.Method
+	 27.71%	Offer
+	 24.85%	Number.of.Dependents
+	 23.72%	Paperless.Billing
+	 20.16%	Monthly.Charge
+	 11.55%	Total.Charges
+	  0.93%	Streaming.Music
+	  0.31%	Married
+	  0.31%	Internet.Type
+	  0.31%	Avg.Monthly.GB.Download
+	  0.22%	Avg.Monthly.Long.Distance.Charges
+	  0.22%	Total.Revenue
+	  
+	  
+100.00%	Tenure.in.Months
+	100.00%	Contract
+	 99.44%	Number.of.Referrals
+	 93.24%	Number.of.Dependents
+	 66.21%	Internet.Type
+	 64.30%	Married
+	 62.90%	Monthly.Charge
+	 60.52%	Paperless.Billing
+	 53.37%	Age
+	 51.57%	Zip.Code
+	 48.79%	Offer
+	 48.46%	Payment.Method
+	 42.01%	Total.Charges
+	 41.81%	Online.Security
+	 40.13%	Premium.Tech.Support
+	 39.90%	Streaming.Music
+	 38.78%	Streaming.TV
+	 38.50%	Total.Revenue
+	 36.68%	Total.Refunds
+	 34.58%	Streaming.Movies
+	 34.38%	Avg.Monthly.GB.Download
+	 32.16%	Age_Category
+	 29.02%	Total.Long.Distance.Charges
+	 23.64%	Avg.Monthly.Long.Distance.Charges
+	 22.32%	Multiple.Lines
+	 13.21%	Unlimited.Data
+	 11.30%	Online.Backup
+	  8.97%	Gender
+	  8.02%	Total.Extra.Data.Charges
+	  2.50%	Device.Protection.Plan
+	  
+Furthermore, if we compare the confusion matrices:
+```{r}
+CrossTable(testY, predict(model2, testX, type="class"), prop.chisq=FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c('Reality', 'Prediction'))
+```
+
+We note that there are more values than the first one that are correct:
++ Churned: 1º -> 275, 2º -> 281
++ Joined: 1º -> 21, 2º -> 35
++ Stayed: 1º -> 669, 2º -> 669
+With the exception of Stayed, the rest of the values have increased slightly, so we can see why the 2% increase in the percentage of hits.
+
+We can therefore conclude that the second model is better than the first one, both in terms of the error rate and the number and quality of the rules, since the first one has 20 rules, while the improved model uses a set of 10 trees, and this generates a single stronger model. 
+
+*** 
+
+# Conclusions and personal opinions, based on the results.
+
+## Possible limitations of the selected data
+
+In the supervised model, we have more at hand real data, statistics, and visualization of this data. In addition, the factor of generating rules, in my opinion, is the determining factor for most of the analysis, since it allows us to obtain these rules and apply them to the company, so that we can improve the quality of those people, offers or services that meet the conditions specified in each rule generated. In the unsupervised model, we can try to generate a model that groups new customers into Stayed or Churned groups, in order to try to predict what the new customer will do. 
+
+## Possible risks of using each model
+
++ The results of unsupervised kmeans models require subjective interpretation. Cluster assignment may not have a single, clear interpretation, and different people may interpret the results differently. In addition, the choice of the optimal number of clusters may also be subjective and not always obvious, and using the wrong number of clusters may lead to misinterpretation of the results. In addition, they are more sensitive to noise and the presence of outliers in the data, and this negatively affects quality. Also, as I have commented in the previous section, the validation of the results is more complicated, since, unlike supervised models where specific metrics are used, the evaluation of the quality of the clusters in unsupervised models can be subjective. Finally, some clustering algorithms, especially the Calinski-Harabasz criterion, can be computationally expensive, especially when working with large data sets as in this case.
+
++ For supervised models, such as the decision tree, a common risk is overfitting, where the model fits the training data too closely and does not generalize well to new data. This can occur especially if the model is very complex relative to the amount of data available. Also, as has happened in this case, when the classes in the training data are unbalanced and there are many more instances of one class than another, the model may have difficulty learning patterns in the minority class and become biased toward the majority class. Another very common risk is the possibility of inheriting biases present in the training data. If the training data contain social or cultural biases, the model may replicate and amplify those biases, leading to discriminatory decisions. Finally, as with the unsupervised model, the presence of noise can negatively affect model performance and lead to incorrect predictions.
+  
+*** 
+
+
+
+
+
+
+
