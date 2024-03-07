@@ -1,7 +1,6 @@
 ---
 title: 'Data Mining - Predicting Customer Churn'
 author: "Author: Eduardo Bayego Modrego"
-date: "January 2024"
 output:
   html_document:
     highlight: default

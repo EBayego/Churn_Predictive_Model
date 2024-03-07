@@ -1,0 +1,364 @@
+---
+title: 'Data Mining - Predicting Customer Churn'
+author: "Eduardo Bayego Modrego"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+******
+# Definition of the analysis problem
+******
+The purpose of this project is to design a data model that can predict churn in a telecommunications company. The objective is to identify patterns and factors that influence a customer's decision to abandon the company's services. For this goal, the following dataset has been selected: https://www.kaggle.com/datasets/shilongzhuang/telecom-customer-churn-by-maven-analytics. This dataset has more than 7000 records and 38 columns, which is a very good number to work on when we are talking about prediction problems, for which the more records we have, the better the future prediction can be. In addition, it has data that at first glance seems very important when predicting when a customer may leave the company, such as salary, dependents or total expenses of the customer.
+The analytical objectives are as follows:
+
+- Identify the most influential factors in the churn decision.
+- Develop a supervised classification model to predict churn.
+- Segment customers to understand different user profiles.
+- Discover associations between different services offered and churn.
+
+As for the methodology to be followed, we will begin the project by performing an exploratory analysis to understand the distribution of the variables and evaluate the correlation between them. Then, we will prepare the data to make them as useful and high quality as possible in order to build the model we want. To achieve this, we have to start by removing records that have empty data, or data that are much lower or higher than the mean (as this may mean that the data is erroneous), or also that there are several records with the same id, which would mean that one of the two records is erroneous. Next, we will apply techniques, such as discretization, to facilitate the analysis and have a data model that is easier to read and understand. Finally, we will have to make the model as clean as possible, eliminating the fields useless for our purpose. We will use singular value decomposition (SVD) to reduce the dimensionality and explore the variability of the data.
+
+******
+# Exploratory analysis
+******
+
+We started with the exploratory analysis to know precisely what data we were working with, and to have them well located.
+```{r}
+path = 'telecom_customer_churn.csv'
+telecomData <- read.csv(path, row.names=NULL)
+structure = str(telecomData)
+```
+
+We have 7043 records with 38 variables. Let's review and write down the meaning of each variable:
+
++ **Customer ID**: A unique ID that identifies each customer.
++ **Gender**: Gender of the customer: Male, Female.
++ **Age**: Current age of the customer, in years, at the end of the fiscal quarter (Q2 2022)
++ **Married**: Indicates if the client is married: Yes, No
++ **Number of Dependents**: Indicates the number of dependents living with the client (dependents can be children, parents...)
++ **City** :The city of the client's primary residence in California.
++ **Zip Code**: The zip code of the customer's primary residence
++ **Latitude**: The latitude of the customer's primary residence
++ **Longitude**: The longitude of the customer's primary residence
++ **Number of Referrals**: Indicates the number of times the customer has referred this company to a friend or family member to date.
++ **Tenure in Months**: Indicates the total number of months the customer has been with the company at the end of the quarter specified above.
++ **Offer**: Identifies the last marketing offer accepted by the customer: None, Offer A, Offer B, Offer C, Offer D, Offer E.
++ **Phone Service**: Indicates if the customer has subscribed to a home phone service with the company: Yes, No
++ **Avg Monthly Long Distance Charges**: Indicates the customer's average long distance charges, calculated through the end of the quarter specified above.
++ **Multiple lines**: Indicates if the customer subscribes to multiple phone lines with the company: Yes, No (if the customer does not subscribe to home phone service, it will be No)
++ **Internet Service**: Indicates if the customer subscribes to Internet service with the company: Yes, No
++ **Internet Type**: Indicates the customer's Internet connection type: DSL, Fiber Optic, Cable (if the customer does not subscribe to Internet service, it will be None).
++ **Avg Monthly GB Download**: Indicates the customer's average download volume in gigabytes, calculated up to the end of the quarter specified above.
++ **Online Security**: Indicates whether the customer subscribes to an additional online security service provided by the company: Yes, No (if the customer does not subscribe to the Internet service, it will be No).
++ **Online Backup** :Indicates if the customer subscribes to an additional online backup service provided by the company: Yes, No (if the customer does not subscribe to the Internet service, it will be No)
++ **Device Protection Plan**: Indicates if the customer subscribes to an additional device protection plan for their Internet equipment provided by the company: Yes, No (if the customer does not subscribe to the Internet service, it will be No)
++ **Premium Tech Support**: Indicates if the customer subscribes to an additional technical support plan provided by the company with reduced waiting times: Yes, No (if the customer does not subscribe to the Internet service, it will be No)
++ **Streaming TV**: Indicates if the customer uses his Internet service to stream TV programming from an external provider at no additional charge: Yes, No (if the customer does not subscribe to Internet service, it will be No)
++ **Streaming Movies**: Indicates if the customer uses their Internet service to stream movies from an external provider at no additional charge: Yes, No (if the customer does not subscribe to Internet service, it will be No)
++ **Streaming Music**: Indicates if the customer uses his Internet service to stream music from a third party provider at no additional charge: Yes, No (if the customer does not subscribe to Internet service, it will be No)
++ **Unlimited Data**: Indicates if the customer has paid an additional monthly fee for unlimited downloads/uploads: Yes, No (if the customer does not subscribe to Internet service, it will be No)
++ **Contract**: Indicates the customer's current contract type: Month-to-Month, One Year, Two Year
++ **Paperless Billing**: Indicates if the customer has chosen paperless billing: Yes, No
++ **Payment Method**: Indicates how the customer pays their bill: Bank Withdrawal, Credit Card, Mailed Check
++ **Monthly Charge**: Indicates the customer's current total monthly charge for all of the company's services.
++ **Total Charges**: Indicates the customer's total charges, calculated up to the end of the quarter specified above.
++ **Total Refunds**: Indicates the customer's total refunds, calculated up to the end of the quarter specified above.
++ **Total Extra Data Charges**: Indicates the customer's total charges for data downloads in addition to those specified in their plan, at the end of the quarter specified above.
++ **Total Long Distance Charges**: Indicates the customer's total long distance charges over and above those specified in their plan, as of the end of the quarter specified above.
++ **Total Revenue**: Indicates the company's total revenue from this customer, calculated through the end of the quarter specified above (Total Charges - Total Returns + Total Extra Data Charges + Total Long Distance Charges).
++ **Customer Status**: Indicates the customer's status at the end of the quarter: Churned, Stayed, or Joined.
++ **Churn Category**: A high-level category for the customer's reason for leaving, which is asked when leaving the company: Attitude, Competitor, Dissatisfaction, Other, Price (directly related to Churn Reason)
++ **Churn Reason**: The specific reason why a customer leaves the company, which is asked when the customer leaves (directly related to the Churn category).
+
+******
+# Data processing and cleaning
+******
+
+Once the analysis is done, we now perform data cleaning, looking for empty or null values.
+```{r}
+print('NA')
+colSums(is.na(telecomData))
+print('Empty')
+colSums(telecomData=="")
+```
+
+We can see that most of the data are complete, but there are several fields in which no information has been filled in, as is the case of Internet Type, Online Security, Online Backup... We can also observe that most of the variables that have unfilled information, have exactly the same number of records, so we can deduce that it is the same record that has several empty variables. To see if we are right, let's start by eliminating the records that have empty Internet Type variable, and proceed to perform another check of the fields. If we are right, deleting these records would be a safe move, as there are 1526 records with many blanks in several variables, out of 7043 records, which will leave us with about 5500 records which is still a large enough number for our project.
+
+```{r}
+if(!require('dplyr')) install.packages('dplyr'); library('dplyr')
+
+telecomCleanData <- telecomData %>% filter(Internet.Type != "")
+print('NA')
+colSums(is.na(telecomCleanData))
+print('Empty')
+colSums(telecomCleanData=="")
+nrow(telecomCleanData)
+```
+
+And indeed, we can see that these records have already been eliminated and the rest of the variables no longer have records with empty elements. In addition, we have reduced the other group of records that have two variables with empty elements: Churn Category and Churn Reason. Although, despite reducing this number, it is still 3761 out of 5517 records that we have now. Eliminating these records can be risky, since we eliminate more than half of our data, so we will be left with this. Also, we have 682 empty data in Multiple Lines, but being a single variable of 38, we can leave them for the moment to be able to work with more data. 
+
+To continue with the exploratory analysis, we have looked at two variables, Latitude and Longitude, which give us the exact coordinates of the customer's address. These two can be grouped in Zip Code, which is the zip code of the address, and if at some point we want to group the area where each customer lives with the number of Churns, we can use this data instead of the exact coordinates. So we can eliminate these two variables, that although they are only 2 of 38, little by little we will have a cleaner model.
+```{r}
+telecomCleanData <- telecomCleanData[, !(names(telecomCleanData) %in% c("Latitude", "Longitude"))]
+```
+
+Finally, let's check that all clients have a unique ID:
+```{r}
+length(unique(telecomCleanData$Customer.ID)) == nrow(telecomCleanData)
+```
+
+As the above command returns TRUE, this means that all records with a unique ID are equal to the total number of records, so no ID is repeated.
+
+******
+# Data discretization
+******
+
+We are now going to discretize some variables in order to better analyze which customers tend to leave the company more. We have 3 variables that can be very interesting to discretize: Age, Tenure in Months and Monthly Charge. By discretizing the age into Young, Adult and Elderly, we can assess which group of people of different ages is the most likely to leave. By discretizing the variable that tells us how long they have been with the company, we can assess whether to give more advantages when they join or have been with the company for a longer period of time. And finally, by discretizing the monthly charges, we can see if it is a factor that those who pay the most leave. First, let's visualize a general graph of the months they have been with the company.
+```{r message= FALSE, warning=FALSE}
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+
+telecomTenureHist = telecomCleanData %>% select("Tenure.in.Months")
+ggplot(telecomTenureHist, aes_string(x = names(telecomTenureHist))) +
+geom_histogram(fill = "cornflowerblue", color = "black",ggtittle = "Tenure in Months")
+```
+
+We can see at first glance how the graph is a U, most customers have just entered or have been there for a while. Therefore, at first glance we can think that we have to do something with the people who are entering new, since these are the ones who leave before completing more months and therefore in the middle of the graph we have fewer customers. Let us now analyze which value of k, to apply kmeans, is the best for the time being customers.
+```{r message= FALSE, warning=FALSE}
+if (!require('fpc')) install.packages('fpc')
+library(fpc)
+if (!require('cluster')) install.packages('cluster')
+library(cluster)
+
+tenure_data <- telecomCleanData$Tenure.in.Months
+k_range <- 2:10
+
+silhouette_scores <- numeric(length = length(k_range))
+calinski_scores <- numeric(length = length(k_range))
+
+for (i in seq_along(k_range)) {
+  k <- k_range[i]
+  kmeans_model <- kmeans(tenure_data, centers = k, nstart = 25)
+  
+  sil <- silhouette(kmeans_model$cluster, dist(matrix(tenure_data, ncol = 1)))
+  silhouette_scores[i] <- mean(sil[, "sil_width"])
+  
+  calinski_scores[i] <- cluster.stats(matrix(tenure_data, ncol = 1), kmeans_model$cluster)$ch
+}
+
+plot(k_range, silhouette_scores, type = "b", pch = 19, frame = FALSE, main = "Silhouette Method", xlab = "Number of clusters (k)", ylab = "Silhouette Score")
+
+plot(k_range, calinski_scores, type = "b", pch = 19, frame = FALSE, main = "Calinski-Harabasz Method", xlab = "Number of clusters (k)", ylab = "Calinski-Harabasz Score")
+```
+
+We can observe that the value of k = 2 has the highest score in both the Calinski-Harabasz Score and the Mean Silhouette. With this in mind, and assessing the value of our variable, we can start by testing with this value to see how it behaves. In this way, we would be dividing between just becoming a customer or having been a customer for some time, with having been a customer for a long time, and, as we have seen, the first case is the one we are mainly interested in. If we were to divide into 3, we would have an intermediate group that would be one that has been a customer for some time, a middle ground between a long time and a new entrant, which, if the first analysis does not convince us, could be a good second plan from which to continue.
+```{r message= FALSE, warning=FALSE}
+if (!require('stats')) install.packages('stats'); library('stats')
+
+telecomTenureHist = telecomCleanData %>% select("Tenure.in.Months")
+
+kmeans_result <- kmeans(telecomTenureHist$Tenure.in.Months, centers = 2)
+
+cluster_assignments <- kmeans_result$cluster
+
+telecomTenureHist$cluster <- cluster_assignments
+
+telecomTenureHist1 = telecomTenureHist[telecomTenureHist$cluster == 1, ]
+telecomTenureHist2 = telecomTenureHist[telecomTenureHist$cluster == 2, ]
+
+telecomTenureHist1 = telecomTenureHist1 %>% select("Tenure.in.Months")
+telecomTenureHist2 = telecomTenureHist2 %>% select("Tenure.in.Months")
+ggplot(telecomTenureHist1, aes_string(x = names(telecomTenureHist1))) +
+geom_histogram(fill = "cornflowerblue", color = "black",ggtittle = "Tenure in Months")
+ggplot(telecomTenureHist2, aes_string(x = names(telecomTenureHist2))) +
+geom_histogram(fill = "red", color = "black",ggtittle = "Tenure in Months")
+```
+```{r}
+nrow(telecomTenureHist1)
+summary(telecomTenureHist1$Tenure.in.Months)
+nrow(telecomTenureHist2)
+summary(telecomTenureHist2$Tenure.in.Months)
+```
+
+We can see that the result with k=2 has concluded that the first range is between 1 and 35 months with 3080 records, and the second between 36 and 72 with 2437 records. We add this value to the dataset, with the Junior and Senior labels, to visualize where the record we are looking at is located more easily.
+```{r}
+telecomCleanData$Tenure_Category <- ifelse(min(telecomTenureHist$cluster) == 1, "Junior", "Senior")
+head(select(telecomCleanData, Tenure.in.Months, Tenure_Category))
+```
+
+By adding the variable in this way, we ensure that the cluster with the minimum value 1 (that is to say, the low cluster) is named Junior.
+
+We now move on to the age. For this variable, we could apply kmeans, but this is not what we want, since we do not want a value that divides the clusters into similar numbers, but we want to know who is an adult according to a specific age range that we want. In this case, we set the limit to Young 18-30, Adult 30-60, Elderly +60.
+
+```{r}
+limits <- c(18, 30, 60, Inf)
+
+labels <- c("Young", "Adult", "Elderly")
+
+telecomCleanData$Age_Category <- as.character(cut(telecomCleanData$Age, breaks = limits, labels = labels, include.lowest = TRUE))
+
+table(telecomCleanData$Age_Category)
+tapply(telecomCleanData$Age, telecomCleanData$Age_Category, summary)
+
+head(select(telecomCleanData, Age, Age_Category))
+```
+
+Podemos observar que hay 1155 jovenes, 2885 adultos y 1477 ancianos. Con estos datos, podemos mostrar una grafica de quien de estos grupos se va de la compañia.
+```{r}
+ggplot(telecomCleanData, aes(x = Age_Category, fill = Customer.Status)) +
+  geom_bar(position = "stack", color = "black") +
+  labs(title = "Number of records per Age_Category and Customer.Status",
+       x = "Age_Category",
+       y = "Number of Records") +
+  scale_fill_manual(values = c("Churned" = "red", "Stayed" = "blue", "Joined" = "green")) +
+  theme_minimal()
+```
+
+We can see that the group that churns the most is adults, but also because they are the largest group of clients. However, seniors and juniors have a more similar number, and seniors tend to leave more than juniors.
+
+Finally, let's discretize Monthly Charge, to see if this is related to churn. Let's first visualize a graph showing the values.
+```{r message= FALSE, warning=FALSE}
+telecomChargeHist = telecomCleanData %>% select("Monthly.Charge")
+ggplot(telecomChargeHist, aes_string(x = names(telecomChargeHist))) +
+geom_histogram(fill = "cornflowerblue", color = "black",ggtittle = "Monthly Charge")
+summary(telecomChargeHist)
+sum(telecomCleanData$Monthly.Charge < 0)
+```
+
+With the graph and the values obtained above, we can see how there are several values (94) that have a monthly charge below 0. This may indicate two things: the first is that they may be erroneous records, and the second is that these customers accounts turned out to require a refund for one reason or another, although this option is ruled out, since 94 values out of more than 7000, is too small a number to have happened only to those people. Therefore, for our analysis and with the lack of information on these records, we will discard them to keep it clean.
+That said, we note that in the graph the majority of people pay around 80€ per month, and there is another large differentiated group that pays between 40€ and 50€. Let's perform another analysis to see the most appropriate k value.
+```{r message= FALSE, warning=FALSE}
+telecomChargeHist = telecomCleanData %>% select("Monthly.Charge", "Customer.ID")
+telecomChargeHist <- telecomChargeHist %>% filter(Monthly.Charge >= 0)
+charge_data <- telecomChargeHist$Monthly.Charge
+k_range <- 2:8
+
+silhouette_scores <- numeric(length = length(k_range))
+calinski_scores <- numeric(length = length(k_range))
+
+for (i in seq_along(k_range)) {
+  k <- k_range[i]
+  kmeans_model <- kmeans(charge_data, centers = k, nstart = 25)
+  
+  sil <- silhouette(kmeans_model$cluster, dist(matrix(charge_data, ncol = 1)))
+  silhouette_scores[i] <- mean(sil[, "sil_width"])
+  
+  calinski_scores[i] <- cluster.stats(matrix(charge_data, ncol = 1), kmeans_model$cluster)$ch
+}
+
+plot(k_range, silhouette_scores, type = "b", pch = 19, frame = FALSE, main = "Silhouette Method", xlab = "Number of clusters (k)", ylab = "Silhouette Score")
+
+plot(k_range, calinski_scores, type = "b", pch = 19, frame = FALSE, main = "Calinski-Harabasz Method", xlab = "Number of clusters (k)", ylab = "Calinski-Harabasz Score")
+```
+
+We can see that the value k=4 seems to be an elbow in Calinski and a peak in mean silhouette, so it is a good data to consider. Also, comparing it with the graph above, we could divide these groups into the choice of: Cheapest offer, offer with some improvement, good offer, all-inclusive. In this way, we could see what each one chooses according to the group he/she is in, although not necessarily someone who is in the "good offer" group will have all taken the same offer. Let's therefore separate into 4 with kmeans.
+```{r message= FALSE, warning=FALSE}
+kmeans_result <- kmeans(telecomChargeHist$Monthly.Charge, centers = 4)
+
+cluster_assignments <- kmeans_result$cluster
+
+telecomChargeHist$cluster <- cluster_assignments
+
+telecomChargeHist1 = telecomChargeHist[telecomChargeHist$cluster == 1, ]
+telecomChargeHist2 = telecomChargeHist[telecomChargeHist$cluster == 2, ]
+telecomChargeHist3 = telecomChargeHist[telecomChargeHist$cluster == 3, ]
+telecomChargeHist4 = telecomChargeHist[telecomChargeHist$cluster == 4, ]
+
+telecomChargeHist1 = telecomChargeHist1 %>% select("Monthly.Charge")
+telecomChargeHist2 = telecomChargeHist2 %>% select("Monthly.Charge")
+telecomChargeHist3 = telecomChargeHist3 %>% select("Monthly.Charge")
+telecomChargeHist4 = telecomChargeHist4 %>% select("Monthly.Charge")
+ggplot(telecomChargeHist1, aes_string(x = names(telecomChargeHist1))) +
+geom_histogram(fill = "cornflowerblue", color = "black",ggtittle = "Monthly Charge")
+ggplot(telecomChargeHist2, aes_string(x = names(telecomChargeHist2))) +
+geom_histogram(fill = "red", color = "black",ggtittle = "Monthly Charge")
+ggplot(telecomChargeHist3, aes_string(x = names(telecomChargeHist3))) +
+geom_histogram(fill = "chartreuse1", color = "black",ggtittle = "Monthly Charge")
+ggplot(telecomChargeHist4, aes_string(x = names(telecomChargeHist4))) +
+geom_histogram(fill = "magenta2", color = "black",ggtittle = "Monthly Charge")
+```
+
+```{r}
+nrow(telecomChargeHist1)
+summary(telecomChargeHist1$Monthly.Charge)
+nrow(telecomChargeHist2)
+summary(telecomChargeHist2$Monthly.Charge)
+nrow(telecomChargeHist3)
+summary(telecomChargeHist3$Monthly.Charge)
+nrow(telecomChargeHist4)
+summary(telecomChargeHist4$Monthly.Charge)
+```
+
+We observe that the group with the minimum services, is composed of 916 records with a minimum of 23.45€ per month and a maximum of 52.50€, the group of services with some improvement are 1191 records of between 52.55€ and 72.65€, the group of improved services 1799, of between 72.75€ and 92.30€, and the service with everything included 1517, of between 92.35€ and 118.75€. Let's now add it to the table and compare this data with the churn records.
+```{r}
+cluster_order <- order(tapply(telecomChargeHist$Monthly.Charge, telecomChargeHist$cluster, mean))
+telecomChargeHist <- telecomChargeHist %>% mutate(
+  Service_Category = case_when(
+    cluster == cluster_order[1] ~ "Minimum Services",
+    cluster == cluster_order[2] ~ "Services with Improvements",
+    cluster == cluster_order[3] ~ "Enhanced Services",
+    cluster == cluster_order[4] ~ "All Included"
+  )
+)
+telecomCleanData <- left_join(telecomCleanData, telecomChargeHist %>% select(Customer.ID, Service_Category), by = "Customer.ID")
+head(telecomCleanData)
+
+ggplot(telecomCleanData, aes(x = Service_Category, fill = Customer.Status)) +
+  geom_bar(position = "stack", color = "black") +
+  labs(title = "Number of records per Service_Category and Customer.Status",
+       x = "Service_Category",
+       y = "Number of records") +
+  scale_fill_manual(values = c("Churned" = "red", "Stayed" = "blue", "Joined" = "green")) +
+  theme_minimal()
+```
+
+We can see that the second group, the one that buys slightly above the minimum, is the one that tends to churn the most. This may be because those who pay a little are happy with it, and those who pay even more do not mind so much and are happy too, while those who are in the middle, slightly below, tend to always choose the best value for money offer. Therefore, one should try to compete in this range of offers with the competition.
+```{r}
+# Export to file for second part
+write.csv(telecomCleanData, file = "./telecomCleanData.csv", row.names = FALSE)
+```
+
+
+******
+# SVD Application
+******
+
+SVD allows us to decompose a matrix into three simpler matrixes, which is useful mainly for dimensionality reduction, but also in several applications such as principal component analysis (PCA), linear systems resolution, and reconstruction of approximate matrices, among others. Thanks to this technique, we can reduce the record size of the dataset, but without losing information, since the idea is that the retained dimensions capture most of the important variability in the data. The downside of this is that SVD is mainly applicable to numerical matrices, and is usually used in the context of dimensionality reduction and numerical data analysis. This can be solved by applying encoding techniques such as one-hot encoding to convert them into numeric variables. One-hot encoding converts a categorical variable into several binary columns, where each column represents a category and takes the value 0 or 1. For example, if we have the records Red, Green, Blue, Red of the variable Color, this translates to 100, 010, 001, 100. 
+(After many unsuccessful attempts to perform this conversion, I got several errors, but in the end I got "logical subscript too long", so I applied the algorithm only on the numeric variables).
+```{r}
+telecomCleanData <- na.omit(telecomCleanData)
+numeric_columns <- telecomCleanData[, sapply(telecomCleanData, is.numeric)]
+
+scaled_data <- scale(numeric_columns)
+
+scaled_data[is.infinite(scaled_data)] <- NA
+scaled_data[is.na(scaled_data)] <- 0
+
+svd_result <- svd(scaled_data)
+
+# Number of single components to be retained
+num_components <- 5
+
+# Dimensionality reduction
+reduccion_dim <- svd_result$u[, 1:num_components] %*% diag(svd_result$d[1:num_components]) %*% t(svd_result$v[, 1:num_components])
+
+cat("Original Matrix:\n")
+print(head(scaled_data))
+cat("\nReduced Matrix:\n")
+print(head(reduccion_dim))
+```
+
+The value of the number of singular components to be retained is very important, since the amount of information that we keep in our reduced data depends proportionally on it. 
+From this matrix we can convert it back into a dataset or continue to investigate whether we want to further reduce the size of the matrix or increase it in order not to lose too much information. In this way we can continue working with the dataset but with much less repetitive information load, storing the most relevant information.
